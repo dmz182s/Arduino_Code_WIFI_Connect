@@ -1,89 +1,72 @@
-#include <ESP8266WiFi.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 
+const char* ssid = "ProjectDPZ";
+const char* password = "hahahihi";
 
-const char* ssid     = "Projectmumet";
-const char* password = "12345678";
+int LED = 18;
+int LED_ESP = 9;
+unsigned int time_now, time_pass;
+unsigned int refresh_time = 1000; // 1 detik
 
-const char* host = "192.168.43.106";
+int response_code;
 
-WiFiClient client;
-const int httpPort = 80;
-String url;
+String updateURL = "http://192.168.137.1/remote_led/espdata.php";
 
-unsigned long timeout;
-  
 void setup() {
-  Serial.begin(9600);
-  delay(10);
+  delay(100);
+  Serial.begin(115200);
+  
+  pinMode(LED, OUTPUT); 
+  pinMode(LED_ESP, OUTPUT);
 
-  pinMode(D0, OUTPUT);
-  digitalWrite(D0, HIGH);
-  
-  // We start by connecting to a WiFi network
-  Serial.println();
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
+  Serial.print("Connecting to WiFi ...");
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
     Serial.print(".");
+    delay(500);
   }
 
-  Serial.println("");
-  Serial.println("WiFi connected");  
-  Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 }
 
-
 void loop() {
-  
-  Serial.print("connecting to ");
-  Serial.println(host);
+  // lampu indikator
+  digitalWrite(LED_ESP, !digitalRead(LED_ESP));
 
-  if (!client.connect(host, httpPort)) {
-    Serial.println("connection failed");
-    //return;
-  }
+  time_now = millis();
 
-// We now create a URI for the request
-  url = "/belajar/index.php/perintah/bacaperintah";
-  
-  Serial.print("Requesting URL: ");
-  Serial.println(url);
+  if(time_now - time_pass > refresh_time) {
+    time_pass = time_now;
+    if(WiFi.status()== WL_CONNECTED){
+      HTTPClient http;
+      
+      http.begin(updateURL);
 
-// This will send the request to the server
-  client.print(String("GET ") + url + " HTTP/1.1\r\n" +
-               "Host: " + host + "\r\n" + 
-               "Connection: close\r\n\r\n");
-  timeout = millis();
-  while (client.available() == 0) {
-    if (millis() - timeout > 5000) {
-      Serial.println(">>> Client Timeout !");
-      client.stop();
-      return;
+      response_code = http.GET();
+
+      if(response_code > 0) {
+        String bodyContent = http.getString();
+
+        Serial.print(response_code);
+        Serial.println(bodyContent);
+
+        if(bodyContent == "on") {
+          digitalWrite(LED, HIGH);
+        } else if (bodyContent == "off") {
+          digitalWrite(LED, LOW);
+        }
+      } else {
+        Serial.print("error code: ");
+        Serial.println(response_code);
+      }
+      
+      http.end(); 
+    }//END of WIFI connected
+    else{
+      Serial.println("WIFI connection error");
     }
   }
-
-// Read all the lines of the reply from server and print them to Serial
-  while(client.available()){
-//    String line = client.readStringUntil('\r');
-//    Serial.print(line);
-    if(client.find("ON")){
-      digitalWrite(D0,LOW);     //lampu on
-      Serial.println("Lampu ON");
-    }else{  
-      digitalWrite(D0,HIGH);    //lampu off
-      Serial.println("Lampu OFF");
-    }
-  }
-
-  Serial.println();
-  Serial.println("closing connection");
-  Serial.println();
-  
 }
